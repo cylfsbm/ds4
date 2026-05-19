@@ -831,6 +831,7 @@ static uint64_t align_up(uint64_t value, uint64_t alignment) {
  * structures.
  */
 
+// the enum for struct ds4_kv.type
 enum {
     GGUF_VALUE_UINT8   = 0,
     GGUF_VALUE_INT8    = 1,
@@ -896,9 +897,9 @@ enum {
 };
 
 typedef struct {
-    ds4_str key;
+    ds4_str key; // the key of kv cache
     uint32_t type;
-    uint64_t value_pos;
+    uint64_t value_pos; // the position of the value in the GGUF file
 } ds4_kv;
 
 typedef struct {
@@ -912,16 +913,17 @@ typedef struct {
     uint64_t bytes;
 } ds4_tensor;
 
+// deepseek model definition
 typedef struct {
-    int fd;
-    const uint8_t *map;
-    uint64_t size;
+    int fd; // file descriptor for the mapped GGUF file
+    const uint8_t *map; // the pointer to the memory map of the GGUF file
+    uint64_t size; // the size of the GGUF file
 
-    uint32_t version;
-    uint64_t n_kv;
-    uint64_t n_tensors;
-    uint64_t alignment;
-    uint64_t tensor_data_pos;
+    uint32_t version; // GGUF version number
+    uint64_t n_kv; // number of key-value pairs in the metadata
+    uint64_t n_tensors; // number of tensors in the model
+    uint64_t alignment; // tensor alignment
+    uint64_t tensor_data_pos; // position of the tensor data
 
     ds4_kv *kv;
     ds4_tensor *tensors;
@@ -14802,6 +14804,7 @@ static void vocab_load(ds4_vocab *vocab, const ds4_model *model) {
 
     vocab->n_vocab = (int)tokens.len;
     vocab->token = xcalloc((size_t)vocab->n_vocab, sizeof(vocab->token[0]));
+    // the reverse index from `token string` to `token id`
     table_init(&vocab->token_to_id, tokens.len);
 
     ds4_cursor c = cursor_at(model, tokens.data_pos);
@@ -17187,9 +17190,13 @@ int ds4_engine_open(ds4_engine **out, const ds4_engine_options *opt) {
     ds4_acquire_instance_lock();
 
     const bool graph_backend = ds4_backend_uses_graph(opt->backend);
+    // load model into memory
     model_open(&e->model, opt->model_path, graph_backend, true);
+    // preload model weight (tensor data) into memory
     if (opt->warm_weights) model_warm_weights(&e->model);
+    // load vocab
     vocab_load(&e->vocab, &e->model);
+    // model config validate
     config_validate_model(&e->model);
     weights_bind(&e->weights, &e->model);
     if (e->backend == DS4_BACKEND_CPU && !cpu_load_directional_steering(e)) {
